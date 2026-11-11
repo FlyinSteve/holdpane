@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.4
+
+- README: "What it runs and what it sends" now lists each program with its command and purpose, what Holdpane reads (including the one environment variable, `OS`) and the refusal text it hands back to Claude. No change in behavior.
+
 ## 0.3.3
 
 - Hooks module: two local variables no longer share the names `on` and `next` with the hook API, so the directory reads every registration plainly. No change in behavior.
