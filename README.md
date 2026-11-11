@@ -67,7 +67,33 @@ Every other command runs as normal. If a `cd`, `pushd`, `Set-Location` or `git -
 
 ## What it runs and what it sends
 
-While it measures, Holdpane starts only these programs, and only to read: `git` (status, diff, log, `clean -n`, `rev-parse`), Git's `bash`, `find`, `du` and `sleep`, and `powershell.exe` (`pwsh` on macOS and Linux). It sends nothing anywhere: there is no network access, no telemetry, and it stores nothing. A command you answer Proceed to is run by Claude Code, not by Holdpane.
+**In short:** Holdpane opens no network connection, makes no HTTP request, has no telemetry, reads no credentials and writes no files. The programs it starts only read. A command you answer Proceed to is run by Claude Code, not by Holdpane.
+
+### Programs it starts
+
+Every program runs only while a risky command is held, before you answer. The commands are fixed text in [`hooks/holdpane.mjs`](hooks/holdpane.mjs); paths from the held command are passed as arguments or as JSON on stdin, never as code.
+
+| Program | Command | Why |
+|---|---|---|
+| `git` (Windows only) | `git --exec-path` | finds the folder Git for Windows is installed in, so Holdpane can use Git's own `bash` and `sleep` (function `findTools`) |
+| Git's `bash` (Windows only) | `<Git folder>/usr/bin/bash.exe -c "echo ok"` | checks once that this `bash` works; on Windows the plain name `bash` can be the WSL launcher. The path is worked out from the output of `git --exec-path`, because Git can be installed anywhere |
+| `sleep` | `sleep 0.25` (Windows: `<Git folder>/usr/bin/sleep.exe 0.25`; without it `powershell.exe -NoProfile -NonInteractive -Command "Start-Sleep -Milliseconds 250"`) | waits in short steps while the pane is open (function `pause`) |
+| `bash` | `bash -c <script> holdpane <paths>` | resolves a `cd` target and counts the files `rm` would delete, with `cd`, `pwd`, `cygpath`, `compgen`, `find`, `du`, `wc`, `head` (scripts `CD_SCRIPT`, `RM_SCRIPT`) |
+| `powershell.exe` (`pwsh` on macOS and Linux) | `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command <script>` | resolves a `Set-Location` target and counts the files `Remove-Item` or `rd /s` would delete, with `Get-Item` and a directory listing (scripts `PS_CD_SCRIPT`, `PS_RM_SCRIPT`). `-ExecutionPolicy Bypass` applies only to this one inline script; no script file is run |
+| `git` | `git -c core.fsmonitor=false -c log.showSignature=false` with `status --porcelain`, `diff --shortstat`, `clean -n`, `rev-parse`, `log --oneline` | lists what `git reset --hard`, `git checkout -- .`, `git clean` or `git push --force` would change (functions `measureGit`, `measurePush`). All of these are local; a force push is compared with your last fetch, Holdpane does not fetch |
+
+It never runs a project's own tools (a migration status command loads your project's code), and it does not touch network paths (`\\server\share`).
+
+### What it reads
+
+- The command text of Bash, PowerShell and Monitor tool calls, to decide whether to hold them. It does not read the rest of the conversation.
+- The session folder, and the names and sizes of the files the held command would delete or change.
+- One environment variable, `OS`, to tell Windows from macOS and Linux (function `findTools`). No tokens, keys, passwords or other credentials.
+
+### What leaves Holdpane
+
+- The pane on your screen, and a toast when you press Proceed.
+- When it refuses a command, a short text that Claude Code hands to Claude like any tool result, for example: *"Holdpane held this command and did not run it: the user pressed Cancel. It would have: delete 5 files (about 402 B). Do not retry it unless the user asks you to."* It holds the reason and what the command would have done. Nothing else is sent anywhere, and nothing is stored.
 
 ## What is different from the original
 
@@ -115,7 +141,7 @@ Gegenüber dem Original (macOS/Linux) funktioniert es mit **Bash und PowerShell 
 
 Installation im Claude-Code-Terminal: `/plugin install holdpane --marketplace FlyinSteve/holdpane`
 
-Es startet nur `git`, `bash`, `find`, `du`, `sleep` und `powershell.exe`, liest nur, sendet nichts und speichert nichts. Es ist ein Sicherheitsnetz, kein Berechtigungssystem: Harte Sperren gehören in die Permission-Regeln. Die Grenzen stehen oben unter *Known limits*.
+Es startet nur `git`, `bash`, `find`, `du`, `sleep` und `powershell.exe`, und nur zum Lesen. Es baut keine Netzverbindung auf, hat keine Telemetrie, liest keine Zugangsdaten (nur die Umgebungsvariable `OS`, um Windows zu erkennen) und speichert nichts. Lehnt es einen Befehl ab, bekommt Claude wie bei jedem Tool-Ergebnis einen kurzen Text mit dem Grund und dem, was der Befehl getan hätte. Es ist ein Sicherheitsnetz, kein Berechtigungssystem: Harte Sperren gehören in die Permission-Regeln. Die Grenzen stehen oben unter *Known limits*.
 
 ## License and credits
 
